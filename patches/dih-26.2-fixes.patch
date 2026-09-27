@@ -1,0 +1,194 @@
+diff --git a/src/main/java/dihclient/mixin/DihMultiplayerScreenMixin.java b/src/main/java/dihclient/mixin/DihMultiplayerScreenMixin.java
+index f1431b2..3cfad94 100644
+--- a/src/main/java/dihclient/mixin/DihMultiplayerScreenMixin.java
++++ b/src/main/java/dihclient/mixin/DihMultiplayerScreenMixin.java
+@@ -16,6 +16,8 @@ import dihclient.util.DihProxyManager;
+ import dihclient.util.DihJoinMacroController;
+ import dihclient.util.DihMacroManager;
+ import dihclient.util.multi.MultiManager;
++import java.util.ArrayList;
++import java.util.List;
+ import java.util.Locale;
+ import net.minecraft.client.gui.screens.multiplayer.ServerSelectionList;
+ import net.fabricmc.loader.api.FabricLoader;
+@@ -141,16 +143,34 @@ public abstract class DihMultiplayerScreenMixin extends Screen implements DihExt
+ 
+         dih$ensureOwnedButtons();
+         int topRight = this.width - MARGIN;
+-        int topAvailable = Math.max(4, this.width - MARGIN * 2);
+-
++        // Minecraft 26.2 hat keinen „Servers"-Button oben. Der Vanilla-Navigations-
++        // Button heisst „Join Server" und liegt im Footer (y = height - 52). Er
++        // kollidiert gar nicht mit unserer Leiste. Wir messen daher nur echte
++        // Fremd-Buttons in der oberen Zeile und halten deren rechte Kante frei.
++        List<AbstractWidget> topRow = new ArrayList<>();
++        for (GuiEventListener child : this.children()) {
++            if (!(child instanceof AbstractWidget widget) || dih$isOwned(widget)) continue;
++            if (!widget.visible) continue;
++            if (widget.getY() > MARGIN + BUTTON_HEIGHT) continue;
++            topRow.add(widget);
++        }
+         boolean lite = dihclient.util.DihLiteVariant.enabled();
+-        int topCell = lite ? Math.max(1, (topAvailable - GAP * 3) / 4)
+-            : Math.max(1, (topAvailable - GAP * 4) / 5);
+-        int accountsW = Math.min(BUTTON_WIDTH, topCell);
+-        int proxiesW = Math.min(BUTTON_WIDTH, topCell);
+-        int libraryW = Math.min(BUTTON_WIDTH, topCell);
+-        int macroW = Math.min(MACRO_BUTTON_WIDTH, topCell);
+-        int multiW = Math.min(MULTI_BUTTON_WIDTH, topCell);
++        int buttonCount = lite ? 4 : 5;
++        int gaps = GAP * (buttonCount - 1);
++
++        // Rechte Kante aller fremden Buttons in der oberen Zeile (z. B. die
++        // Meteor-Knoepfe „Accounts"/„Proxies" bei Prioritaet 1000).
++        int reserved = MARGIN;
++        for (AbstractWidget widget : topRow) {
++            reserved = Math.max(reserved, widget.getX() + widget.getWidth());
++        }
++        int topAvailable = Math.max(1, topRight - reserved - GAP - MARGIN);
++        int cell = Math.max(MACRO_BUTTON_WIDTH, (topAvailable - gaps) / buttonCount);
++        int accountsW = Math.max(BUTTON_WIDTH, cell);
++        int proxiesW = Math.max(BUTTON_WIDTH, cell);
++        int libraryW = Math.max(BUTTON_WIDTH, cell);
++        int macroW = Math.max(MACRO_BUTTON_WIDTH, cell);
++        int multiW = Math.max(MULTI_BUTTON_WIDTH, cell);
+         int cursor = topRight;
+         cursor -= accountsW;
+         dih$place(dih$accountsButton, cursor, MARGIN, accountsW, BUTTON_HEIGHT);
+@@ -277,6 +297,17 @@ public abstract class DihMultiplayerScreenMixin extends Screen implements DihExt
+             || widget == dih$packsButton || widget == dih$libraryButton || widget == dih$recordButton;
+     }
+ 
++    /** Erkennt den Vanilla-„Servers"-Button anhand seiner Beschriftung. */
++    @Unique
++    private boolean dih$isServerButton(AbstractWidget widget) {
++        if (!(widget instanceof Button button)) return false;
++        // Minecraft 26.2: der Navigations-Button heisst "Join Server"
++        // (selectServer.select), nicht "Servers". Beides wird abgedeckt.
++        String label = button.getMessage().getString().trim().toLowerCase(java.util.Locale.ROOT);
++        return label.equals("join server") || label.equals("servers") || label.equals("server")
++            || label.startsWith("server ");
++    }
++
+     @Unique
+     private net.minecraft.client.multiplayer.ServerData dih$selectedServerData() {
+         if (serverSelectionList == null) return null;
+diff --git a/src/main/java/dihclient/util/DihConfig.java b/src/main/java/dihclient/util/DihConfig.java
+index 6ec16f1..2a5d662 100644
+--- a/src/main/java/dihclient/util/DihConfig.java
++++ b/src/main/java/dihclient/util/DihConfig.java
+@@ -184,19 +184,20 @@ public final class DihConfig implements Cloneable {
+ 
+         public boolean advanced = false;
+ 
+-        // DIH Client default identity: blue scheme. The accent family is blue;
+-        // text stays warm-neutral, success stays green, danger stays red (semantic cues).
+-        public int master = 0xFF3B6EFF;
+-        public int accent = 0xFF3B6EFF;
+-        public int outline = 0xFF2B50B3;
+-        public int text = 0xFFF3ECE7;
+-        public int toggle = 0xFF3B6EFF;
+-        public int backdrop = 0xFF4863B2;
+-        public int success = 0xFF35D873;
+-        public int danger = 0xFFE26A6A;
+-        public int button = 0xFF1F368F;
+-        public int header = 0xFF3B6EFF;
+-        public int hover = 0xFF6482FF;
++        // DIH Client-Farbschema: Catppuccin Mocha, damit das Design zum
++        // Catppuccin-Addon in Meteor passt. Die Semantik bleibt erhalten
++        // (success=gruen, danger=rot), nur die Flaechen kommen aus der Palette.
++        public int master = 0xFFCBA6F7;    // mauve   – Primaerakzent
++        public int accent = 0xFFCBA6F7;   // mauve
++        public int outline = 0xFF585B70;  // surface2
++        public int text = 0xFFCDD6F4;     // text
++        public int toggle = 0xFF89B4FA;   // blue
++        public int backdrop = 0xFF313244; // surface0
++        public int success = 0xFFA6E3A1;  // green
++        public int danger = 0xFFF38BA8;   // red
++        public int button = 0xFF45475A;   // surface1
++        public int header = 0xFFB4BEFE;   // lavender
++        public int hover = 0xFF94E2D5;    // teal
+     }
+ 
+     public static final class ModuleState {
+diff --git a/src/main/java/dihclient/util/DihProxyManager.java b/src/main/java/dihclient/util/DihProxyManager.java
+index ebbd269..7ef6827 100644
+--- a/src/main/java/dihclient/util/DihProxyManager.java
++++ b/src/main/java/dihclient/util/DihProxyManager.java
+@@ -256,13 +256,44 @@ public final class DihProxyManager extends PersistentNbtManager<DihProxy> implem
+         scheduleSave();
+     }
+ 
++    /**
++     * Liefert den ersten aktivierten Proxy. Ist der eingetragene Server nicht
++     * erreichbar, wird er deaktiviert, damit Spieler nicht mit
++     * „Connection refused" auf dem Servermenu landen.
++     */
+     public synchronized DihProxy getEnabled() {
+         for (DihProxy proxy : items) {
+-            if (proxy.enabled && proxy.isValid()) return proxy;
++            if (proxy.enabled && proxy.isValid()) {
++                if (dih$unreachable(proxy)) {
++                    proxy.enabled = false;
++                    bumpListRevision();
++                    scheduleSave();
++                    continue;
++                }
++                return proxy;
++            }
+         }
+         return null;
+     }
+ 
++    /** Einmaliger TCP-Connect-Test; Ergebnisse werden fuer 60s zwischengespeichert. */
++    private static boolean dih$unreachable(DihProxy proxy) {
++        long now = System.currentTimeMillis();
++        Long cached = dih$reachability.get(proxy.address + ":" + proxy.port);
++        if (cached != null && now - cached < 60_000L) return cached == 0L;
++        boolean ok;
++        try (java.net.Socket socket = new java.net.Socket()) {
++            socket.connect(new java.net.InetSocketAddress(proxy.address, proxy.port), 2000);
++            ok = true;
++        } catch (Exception e) {
++            ok = false;
++        }
++        dih$reachability.put(proxy.address + ":" + proxy.port, ok ? 1L : 0L);
++        return !ok;
++    }
++
++    private static final java.util.Map<String, Long> dih$reachability = new java.util.concurrent.ConcurrentHashMap<>();
++
+     public boolean isRefreshing() {
+         return refreshing.get();
+     }
+diff --git a/src/main/java/dihclient/util/DihTheme.java b/src/main/java/dihclient/util/DihTheme.java
+index d5a20fe..b500a77 100644
+--- a/src/main/java/dihclient/util/DihTheme.java
++++ b/src/main/java/dihclient/util/DihTheme.java
+@@ -12,16 +12,16 @@ public final class DihTheme {
+      * colours, not the default theme (that's {@code DihConfig.ThemeColors}, which is blue).
+      */
+     public static final int[] DEFAULTS = {
+-        0xFFFF3B3B,
+-        0xFFB32B2B,
+-        0xFFF3ECE7,
+-        0xFFFF3B3B,
+-        0xFFB24848,
+-        0xFF35D873,
+-        0xFFE26A6A,
+-        0xFF8F1F24,
+-        0xFFFF3B3B,
+-        0xFFFF6464
++        0xFFCBA6F7, // ACCENT   – mauve
++        0xFF585B70, // OUTLINE  – surface2
++        0xFFCDD6F4, // TEXT     – text
++        0xFF89B4FA, // TOGGLE   – blue
++        0xFF313244, // BACKDROP – surface0
++        0xFFA6E3A1, // SUCCESS  – green
++        0xFFF38BA8, // DANGER   – red
++        0xFF45475A, // BUTTON   – surface1
++        0xFFB4BEFE, // HEADER   – lavender
++        0xFF94E2D5  // HOVER    – teal
+     };
+ 
+     private static final float NEUTRAL_THRESHOLD = 0.10f;

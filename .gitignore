@@ -1,0 +1,32 @@
+# Build-Artefakte
+build/
+out/
+classes/
+
+# Gradle
+.gradle/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+bin/
+.classpath
+.project
+*.launch
+
+# Betriebssystem
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Große Binaries gehören nicht ins Repository.
+# Die gebauten JARs (je ~20 MB) über Releases verteilen, nicht über Git.
+*.jar
+*.zip
